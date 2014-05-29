@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -24,35 +25,49 @@ namespace ActorsLifeForMe.MD5Folder
             // this quickly modifies our processing to be multi-threaded
             var blockConfiguration = new ExecutionDataflowBlockOptions()
             {
-                MaxDegreeOfParallelism = 4
+                MaxDegreeOfParallelism = 1,         // One thread
+                BoundedCapacity = 1                 // One item in the queue at any one time.
             };
 
-            var createMD5 = new TransformBlock<string, Tuple<string, string>>(
-                filename => MD5WithFileName(filename), blockConfiguration);
+            var filePaths = new BufferBlock<string>();
 
 
             var display = new ActionBlock<Tuple<string, string>>(new Action<Tuple<string, string>>(DisplayMD5FromFileOnConsole));
 
-            createMD5.LinkTo(display, new DataflowLinkOptions { PropagateCompletion = true });
+            var createBlocks = new List<TransformBlock<string, Tuple<string, string>>>();
+
+            for (int i = 0; i < 4; i++)
+            {
+                var createMD5 = new TransformBlock<string, Tuple<string, string>>(
+                    filename => MD5WithFileName(filename), blockConfiguration);
+
+
+
+
+                createMD5.LinkTo(display, new DataflowLinkOptions {PropagateCompletion = true});
+                filePaths.LinkTo(createMD5, new DataflowLinkOptions {PropagateCompletion = true});
+                createBlocks.Add(createMD5);
+            }
 
             var files = System.IO.Directory.GetFiles(folder);
             foreach (var filepath in files)
             {
-                createMD5.Post(filepath);
+                filePaths.Post(filepath);
             }
 
-            createMD5.Complete();
+            filePaths.Complete();
             display.Completion.Wait();
         }
 
         private static Tuple<string, string> MD5WithFileName(string filename)
         {
+            Console.WriteLine("Begin : {0}", Path.GetFileName(filename));
+
             return Tuple.Create(filename, MD5FromFile(filename));
         }
 
         private static void DisplayMD5FromFileOnConsole(Tuple<string, string> filepath)
         {
-            Console.WriteLine("Begin : {0}", Path.GetFileName(filepath.Item1));
             Console.WriteLine("End : {0} : {1}", Path.GetFileName(filepath.Item1), filepath.Item2);
         }
 
