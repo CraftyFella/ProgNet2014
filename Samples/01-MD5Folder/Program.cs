@@ -1,8 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace ActorsLifeForMe.MD5Folder
 {
@@ -13,7 +12,7 @@ namespace ActorsLifeForMe.MD5Folder
             Console.WriteLine("Ready to start.");
             Console.ReadLine();
 
-            ProcessFolder(@"N:\iPlayer Recordings\ProgNet");
+            ProcessFolder(@"D:\Movies");
 
             Console.WriteLine("Completed.");
             Console.ReadLine();
@@ -21,12 +20,23 @@ namespace ActorsLifeForMe.MD5Folder
 
         private static void ProcessFolder(string folder)
         {
-            var files = System.IO.Directory.GetFiles(folder);
+            var makeMD5AndDisplayToConsole = new ActionBlock<string>(new Action<string>(GetMD5FromFileAndDisplay));
+
+            var files = Directory.GetFiles(folder);
             foreach (var filepath in files)
             {
-                Console.WriteLine("Begin {0} : ", Path.GetFileName(filepath));
-                Console.WriteLine("End {0} : {1}", Path.GetFileName(filepath), MD5FromFile(filepath));
+                makeMD5AndDisplayToConsole.Post(filepath);
             }
+
+            makeMD5AndDisplayToConsole.Complete();              // Done
+            makeMD5AndDisplayToConsole.Completion.Wait();       // Block until we're done
+
+        }
+
+        private static void GetMD5FromFileAndDisplay(string filepath)
+        {
+            Console.WriteLine("Begin {0} : ", Path.GetFileName(filepath));
+            Console.WriteLine("End {0} : {1}", Path.GetFileName(filepath), MD5FromFile(filepath));
         }
 
         private static string MD5FromFile(string filename)
