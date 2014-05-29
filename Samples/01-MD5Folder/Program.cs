@@ -20,7 +20,13 @@ namespace ActorsLifeForMe.MD5Folder
 
         private static void ProcessFolder(string folder)
         {
-            var makeMD5AndDisplayToConsole = new ActionBlock<string>(new Action<string>(GetMD5FromFileAndDisplay));
+
+            var config = new ExecutionDataflowBlockOptions
+            {
+                MaxDegreeOfParallelism = 4
+            };
+
+            var makeMD5AndDisplayToConsole = new ActionBlock<string>(new Action<string>(GetMD5FromFileAndDisplay), config);
 
             var files = Directory.GetFiles(folder);
             foreach (var filepath in files)
