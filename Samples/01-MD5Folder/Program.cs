@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Security.Cryptography;
+using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
 namespace ActorsLifeForMe.MD5Folder
@@ -12,7 +13,7 @@ namespace ActorsLifeForMe.MD5Folder
             Console.WriteLine("Ready to start.");
             Console.ReadLine();
 
-            ProcessFolder(@"D:\Movies");
+            ProcessFolder(@"D:\Movies\");
 
             Console.WriteLine("Completed.");
             Console.ReadLine();
@@ -20,29 +21,39 @@ namespace ActorsLifeForMe.MD5Folder
 
         private static void ProcessFolder(string folder)
         {
-
-            var config = new ExecutionDataflowBlockOptions
+            // this quickly modifies our processing to be multi-threaded
+            var blockConfiguration = new ExecutionDataflowBlockOptions()
             {
                 MaxDegreeOfParallelism = 4
             };
 
-            var makeMD5AndDisplayToConsole = new ActionBlock<string>(new Action<string>(GetMD5FromFileAndDisplay), config);
+            var createMD5 = new TransformBlock<string, Tuple<string, string>>(
+                filename => MD5WithFileName(filename), blockConfiguration);
 
-            var files = Directory.GetFiles(folder);
+
+            var display = new ActionBlock<Tuple<string, string>>(new Action<Tuple<string, string>>(DisplayMD5FromFileOnConsole));
+
+            createMD5.LinkTo(display, new DataflowLinkOptions { PropagateCompletion = true });
+
+            var files = System.IO.Directory.GetFiles(folder);
             foreach (var filepath in files)
             {
-                makeMD5AndDisplayToConsole.Post(filepath);
+                createMD5.Post(filepath);
             }
 
-            makeMD5AndDisplayToConsole.Complete();              // Done
-            makeMD5AndDisplayToConsole.Completion.Wait();       // Block until we're done
-
+            createMD5.Complete();
+            display.Completion.Wait();
         }
 
-        private static void GetMD5FromFileAndDisplay(string filepath)
+        private static Tuple<string, string> MD5WithFileName(string filename)
         {
-            Console.WriteLine("Begin {0} : ", Path.GetFileName(filepath));
-            Console.WriteLine("End {0} : {1}", Path.GetFileName(filepath), MD5FromFile(filepath));
+            return Tuple.Create(filename, MD5FromFile(filename));
+        }
+
+        private static void DisplayMD5FromFileOnConsole(Tuple<string, string> filepath)
+        {
+            Console.WriteLine("Begin : {0}", Path.GetFileName(filepath.Item1));
+            Console.WriteLine("End : {0} : {1}", Path.GetFileName(filepath.Item1), filepath.Item2);
         }
 
         private static string MD5FromFile(string filename)
@@ -54,13 +65,6 @@ namespace ActorsLifeForMe.MD5Folder
                     return BitConverter.ToString(md5.ComputeHash(stream)).Replace("-", "").ToLower();
                 }
             }
-        }
-
-        private static void WriteMD5ForFile(string filename)
-        {
-            var md5Hash = MD5FromFile(filename);
-
-            System.IO.File.WriteAllText(filename + ".tpl.md5", md5Hash);
         }
     }
 }
